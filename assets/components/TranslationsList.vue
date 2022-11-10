@@ -35,7 +35,7 @@
 
           <td>
             <div class="mobile-only cell-label">{{ t('Key') }}</div>
-            <pre>{{ sourceMessage.message }}</pre>
+            <pre class="message-key">{{ sourceMessage.message }}</pre>
           </td>
 
           <td v-for="language in checkedLanguages" v-bind:key="language.id"
@@ -46,7 +46,20 @@
               <span class="light" v-if="language.nativeName"> – {{ language.nativeName }}</span>
             </div>
             <div class="message-text">
-              <textarea class="text nicetext fullwidth"
+              <div :ref="`language-${sourceMessage.id}-${language.id}-div`"
+                   v-show="!sourceMessage.isFocused?.[language.id]"
+                   @mousedown="onMouseDown(sourceMessage, language)"
+                   @click="onClick(sourceMessage, language)"
+                   @focusin="onFocusin(sourceMessage, language)"
+                   tabindex="0"
+                   class="message-textarea text nicetext fullwidth"
+                   style="cursor: text;">
+                {{sourceMessage.languages[language.id]}}
+              </div>
+              <textarea :ref="`language-${sourceMessage.id}-${language.id}-textarea`"
+                        v-show="sourceMessage.isFocused?.[language.id]"
+                        @focusout="setFocus(sourceMessage, language, false)"
+                        class="message-textarea text nicetext fullwidth"
                         v-model="sourceMessage.languages[language.id]"
                         @change="change(sourceMessage, language)"
                         @keyup="change(sourceMessage, language)"
@@ -240,6 +253,49 @@ export default {
 
       this.updateModifiedMessages(modifiedMessages);
     },
+    onMouseDown (sourceMessage, language) {
+      if (this.isNullOrUndefined(sourceMessage.isMouseDown)) {
+        sourceMessage.isMouseDown = {};
+      }
+      sourceMessage.isMouseDown[language.id] = true;
+    },
+    onClick (sourceMessage, language) {
+      this.setFocus(sourceMessage, language, true);
+      sourceMessage.isMouseDown[language.id] = false;
+    },
+    onFocusin (sourceMessage, language) {
+      if (sourceMessage.isMouseDown?.[language.id]) return false;
+      this.setFocus(sourceMessage, language, true);
+    },
+    setFocus (sourceMessage, language, isFocused) {
+      if (this.isNullOrUndefined(sourceMessage.isFocused)) {
+        sourceMessage.isFocused = {};
+      }
+      sourceMessage.isFocused[language.id] = isFocused;
+
+      if (isFocused) {
+        const div = this.$refs[`language-${sourceMessage.id}-${language.id}-div`][0];
+        const textarea = this.$refs[`language-${sourceMessage.id}-${language.id}-textarea`][0];
+        const height = div.offsetHeight;
+        const sel = getSelection();
+        const anchorOffset = sel?.anchorOffset;
+        const focusOffset = sel?.focusOffset;
+        this.$nextTick(() => {
+          if (anchorOffset && focusOffset) {
+            const min = Math.min(anchorOffset, focusOffset);
+            const max = Math.max(anchorOffset, focusOffset);
+            textarea.setSelectionRange(min, max);
+          }
+          textarea.focus();
+          textarea.style.height = `${height}px`;
+          textarea.style.overflow = 'hidden';
+
+          setTimeout(() => {
+            textarea.style.overflow = '';
+          }, 100);
+        });
+      }
+    },
     isModified (sourceMessage, language) {
       let originalSourceMessage = this.originalSourceMessages[this.sourceMessages.indexOf(sourceMessage)];
       let originalValue = this.normalizeStringValue(originalSourceMessage.languages[language.id]);
@@ -309,6 +365,10 @@ export default {
   table-layout: fixed;
 }
 
+.translate-table td {
+  vertical-align: top;
+}
+
 .translate-table tr:nth-child(2n) td {
   background-color: #f8f9fa;
 }
@@ -323,14 +383,20 @@ table.data.translate-table tr td.modified {
   @include sans-serif-font();
 }
 
+.message-key {
+  padding: 6px 0;
+}
+
 .message-text {
   position: relative;
 }
 
-.message-text textarea {
+.message-textarea {
   overflow-x: hidden;
   min-height: 34px;
   padding-right: 40px;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .language-label {
@@ -367,7 +433,7 @@ table.data.translate-table tr td.modified {
     display: none;
   }
 
-  .message-text textarea {
+  .message-textarea {
     padding-right: 7px;
   }
 
